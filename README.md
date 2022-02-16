@@ -1,4 +1,4 @@
-### Hi there 👋
+
 
 <!--
 **kocapb777/kocapb777** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
@@ -14,3 +14,4 @@ Here are some ideas to get you started:
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
 -->
+Вся информация находится в файлах конфигураций.
