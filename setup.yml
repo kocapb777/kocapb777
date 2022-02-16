@@ -1,0 +1,110 @@
+---
+# ansible-playbook -i hosts setup.yml
+#
+# 1. Установка ключей (тег -t key)
+- hosts: all
+  become: true
+  become_user: root
+  remote_user: vagrant
+  gather_facts: false
+  tasks:
+
+
+    - name: Wait for ssh to be up
+      become: false
+      wait_for:
+        port: 22
+        delay: 5
+        connect_timeout: 5
+        timeout: 360
+        host: "{{ ansible_host }}"
+      delegate_to: localhost
+      tags: key
+
+    - name: Installs python
+      raw: apt-get update && apt-get install -y python
+      tags: key
+
+    - name: Creates destination directory
+      file:
+        state: directory
+        mode: 0700
+        dest: /root/.ssh/
+      tags: key
+
+    - name: Pushes user's rsa key to root's vagrant box
+      copy:
+        src: ~/.ssh/id_rsa.pub
+        dest: /root/.ssh/authorized_keys
+        owner: root
+        mode: 0600
+      register: rsa
+      ignore_errors: true
+      tags: key
+
+    - name: Pushes user's dsa key to root's vagrant box
+      copy:
+        src: ~/.ssh/id_dsa.pub
+        dest: /root/.ssh/authorized_keys
+        owner: root
+        mode: 0600
+      when: rsa is failed
+      tags: key
+
+    - name: Checks if resolver is working properly (issues with some VBox/Host OS combinations)
+      command: host -t A ansible.cc
+      register: ns
+      ignore_errors: true
+      tags: key
+
+    - name: Pushes new resolver configuration if resolver fails
+      lineinfile:
+        regexp: "^nameserver "
+        line: "nameserver 8.8.8.8"
+        dest: /etc/resolv.conf
+      when: ns is failed
+      tags: key
+
+    - name: Checks if resolver is working properly with new nameserver
+      command: host -t A ansible.cc
+      tags: key
+
+        
+       
+# 2. Установка необходимых пакетов и компонентов, а также самого приложения (тег -t deploy)
+
+    - name: Installs necessary packages
+      apt:
+        pkg: ["python-pip", "git"]
+        state: latest
+        update_cache: true
+      tags: deploy  
+      
+    - name: Deploy Flaskex
+      git:
+        repo: https://github.com/anfederico/Flaskex
+        dest: /var/www/Flaskex
+      tags: deploy  
+      
+    - name: Installs requirements
+      command: pip install -r /var/www/Flaskex/requirements.txt
+      tags: deploy
+      
+# 3. Запуск приложения в фоновом режиме (тег -t run)   
+   
+    - name: Trying to start Flaskex...
+      command: python /var/www/Flaskex/app.py
+      async: 600 #?????
+      poll: 0
+      register: startup
+      become: true
+      tags: run 
+#            
+#      
+    - name: Checking for errors
+      fail:
+        msg: "Flaskex doesn't start. Check it"
+      when: startup is failed
+      tags: run
+#      
+ # Тут я не понял, как запустить скрипт в фоновом процессе, чтобы Ansible получил ответ и завершил работу. Решения, представленные в интернете, не работают с данным скриптом, т.к. Flaskex не может запуститься, либо запускается и сразу падает.  Скорее всего, нужны специальные демоны для Python. Либо запускать Flaskex вручную. В данный момент конфиг такой, что Flaskex запускается на 600 секунд и завершается. 
